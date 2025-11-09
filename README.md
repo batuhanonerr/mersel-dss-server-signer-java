@@ -74,6 +74,9 @@ mvn spring-boot:run
 - ✅ **WS-Security**: SOAP imzalama
 - ✅ **Timestamp**: RFC 3161 (TÜBİTAK ESYA desteği)
 - ✅ **HSM/PKCS#11**: Donanım güvenlik modülü
+- ✅ **KamuSM Root Sertifika Desteği** - Online ve Offline mod desteği
+  - **Online Mod**: Otomatik olarak [http://depo.kamusm.gov.tr/depo/SertifikaDeposu.xml](http://depo.kamusm.gov.tr/depo/SertifikaDeposu.xml) adresinden yüklenir
+  - **Offline Mod**: Yerel dosya sisteminden belirtilen path'ten yüklenir
 - ✅ **Production Ready**: Monitoring, logging, metrics
 
 ---
@@ -115,6 +118,65 @@ sign-api/
 ├── resources/test-certs/   # Test sertifikaları
 └── examples/               # Kullanım örnekleri
 ```
+
+---
+
+## ⚙️ Konfigürasyon
+
+### Güvenilir Kök Sertifika Resolver Kullanımı
+
+Sistem üç farklı resolver tipini destekler. `TRUSTED_ROOT_RESOLVER_TYPE` parametresi ile seçim yapılır.
+
+#### 1. KamuSM XML Depo Online (Varsayılan)
+
+Varsayılan olarak, KamuSM root ve ara sertifikaları **otomatik** olarak şu adresten yüklenir:
+- [http://depo.kamusm.gov.tr/depo/SertifikaDeposu.xml](http://depo.kamusm.gov.tr/depo/SertifikaDeposu.xml)
+
+Bu sayede her zaman güncel sertifikalar kullanılır. Periyodik olarak otomatik yenilenir (varsayılan: her gün saat 03:15).
+
+```bash
+export TRUSTED_ROOT_RESOLVER_TYPE=kamusm-online
+export KAMUSM_ROOT_URL=http://depo.kamusm.gov.tr/depo/SertifikaDeposu.xml
+export KAMUSM_ROOT_REFRESH_CRON="0 15 3 * * *"  # Her gün saat 03:15
+```
+
+#### 2. KamuSM XML Depo Offline
+
+Offline ortamlarda veya internet bağlantısı olmayan sistemlerde, KamuSM sertifika deposunu yerel dosya sisteminden yükleyebilirsiniz:
+
+```bash
+export TRUSTED_ROOT_RESOLVER_TYPE=kamusm-offline
+export KAMUSM_ROOT_OFFLINE_PATH=file:/path/to/SertifikaDeposu.xml
+# veya classpath'ten
+export KAMUSM_ROOT_OFFLINE_PATH=classpath:certs/SertifikaDeposu.xml
+```
+
+**Offline Mod Kullanım Senaryoları:**
+- Air-gapped (izole) sistemler
+- İnternet bağlantısı olmayan ortamlar
+- Güvenlik gereksinimleri nedeniyle dış bağlantı kısıtlamaları
+- Yerel sertifika deposu kullanımı
+
+**Not:** Offline modda sertifikalar sadece uygulama başlangıcında yüklenir. Otomatik yenileme yapılmaz.
+
+#### 3. Certificate Folder Resolver
+
+Belirtilen klasördeki tüm `.crt`, `.cer` ve `.pem` dosyalarını güvenilir kök sertifika olarak yükler. Bu resolver, özel sertifika klasörlerinden sertifika yüklemek için idealdir.
+
+```bash
+export TRUSTED_ROOT_RESOLVER_TYPE=certificate-folder
+export TRUSTED_ROOT_CERT_FOLDER_PATH=/path/to/certificates
+# veya file: prefix ile
+export TRUSTED_ROOT_CERT_FOLDER_PATH=file:/path/to/certificates
+```
+
+**Certificate Folder Resolver Kullanım Senaryoları:**
+- Özel sertifika klasörlerinden yükleme
+- Kurumsal CA sertifikalarının toplu yüklenmesi
+- Test ortamlarında özel sertifika kullanımı
+- Farklı kaynaklardan sertifika birleştirme
+
+**Not:** Klasördeki tüm geçerli sertifika dosyaları otomatik olarak yüklenir. Alt klasörler taranmaz.
 
 ---
 

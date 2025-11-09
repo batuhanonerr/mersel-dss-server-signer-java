@@ -9,6 +9,15 @@ ve bu proje [Semantic Versioning](https://semver.org/spec/v2.0.0.html) kullanmak
 
 ### Added
 
+- 🔧 **Güvenilir Kök Sertifika Resolver Sistemi** - Üç farklı resolver tipi desteği
+  - **KamuSM XML Depo Online Resolver**: İnternet üzerinden KamuSM XML deposunu otomatik indirme ve periyodik güncelleme
+  - **KamuSM XML Depo Offline Resolver**: Yerel dosya sisteminden KamuSM XML deposunu yükleme (air-gapped sistemler için)
+  - **Certificate Folder Resolver**: Belirtilen klasördeki tüm .crt/.cer/.pem dosyalarını güvenilir kök sertifika olarak yükleme
+  - Configuration ile kolay resolver değişimi (`trusted.root.resolver.type=kamusm-online|kamusm-offline|certificate-folder`)
+  - Tüm resolver'lar için aynı interface ve davranış garantisi (`TrustedRootCertificateResolver`)
+  - Offline ortamlarda güvenilir kök sertifika zinciri oluşturma desteği
+  - Özel sertifika klasörlerinden toplu sertifika yükleme desteği
+
 - 🔐 **Sertifika Listeleme API'si** - Keystore sertifikalarını görüntüleme ve bilgi alma
   - **Sertifika Listesi Endpoint** (`GET /api/certificates/list`)
     - PKCS#11 ve PFX keystore'larından tüm sertifikaları listeler
