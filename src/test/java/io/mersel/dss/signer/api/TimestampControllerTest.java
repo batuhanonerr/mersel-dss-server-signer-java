@@ -2,6 +2,7 @@ package io.mersel.dss.signer.api;
 
 import io.mersel.dss.signer.api.controllers.TimestampController;
 import io.mersel.dss.signer.api.dtos.TimestampResponseDto;
+import io.mersel.dss.signer.api.dtos.TimestampStatusDto;
 import io.mersel.dss.signer.api.dtos.TimestampValidationResponseDto;
 import io.mersel.dss.signer.api.exceptions.TimestampException;
 import io.mersel.dss.signer.api.services.timestamp.TimestampConfigurationService;
@@ -183,29 +184,30 @@ public class TimestampControllerTest {
     void testGetStatus_whenConfigured_shouldReturnTrue() {
         when(timestampConfigurationService.isAvailable()).thenReturn(true);
 
-        ResponseEntity<?> response = timestampController.getStatus();
+        ResponseEntity<TimestampStatusDto> response = timestampController.getStatus();
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
         
-        @SuppressWarnings("unchecked")
-        Map<String, Object> body = (Map<String, Object>) response.getBody();
-        assertTrue((Boolean) body.get("configured"));
-        verify(timestampConfigurationService, times(2)).isAvailable();
+        TimestampStatusDto body = response.getBody();
+        assertTrue(body.isConfigured());
+        assertNotNull(body.getMessage());
+        verify(timestampConfigurationService, times(1)).isAvailable();
     }
 
     @Test
     void testGetStatus_whenNotConfigured_shouldReturnFalse() {
         when(timestampConfigurationService.isAvailable()).thenReturn(false);
 
-        ResponseEntity<?> response = timestampController.getStatus();
+        ResponseEntity<TimestampStatusDto> response = timestampController.getStatus();
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
         
-        @SuppressWarnings("unchecked")
-        Map<String, Object> body = (Map<String, Object>) response.getBody();
-        assertFalse((Boolean) body.get("configured"));
+        TimestampStatusDto body = response.getBody();
+        assertFalse(body.isConfigured());
+        assertNotNull(body.getMessage());
+        verify(timestampConfigurationService, times(1)).isAvailable();
     }
 
     @Test
