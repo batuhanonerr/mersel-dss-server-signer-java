@@ -4,6 +4,7 @@ import io.mersel.dss.signer.api.constants.XmlConstants;
 import io.mersel.dss.signer.api.exceptions.SignatureException;
 import io.mersel.dss.signer.api.models.SignResponse;
 import io.mersel.dss.signer.api.models.SigningMaterial;
+import io.mersel.dss.signer.api.services.crypto.DigestAlgorithmResolverService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -39,9 +40,12 @@ public class WsSecuritySignatureService {
     private static final String TS_ID = "SignedSoapTimestampContent";
     private static final String NS_WSSE = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd";
     private final Semaphore semaphore;
+    private final DigestAlgorithmResolverService digestAlgorithmResolver;
 
-    public WsSecuritySignatureService(Semaphore signatureSemaphore) {
+    public WsSecuritySignatureService(Semaphore signatureSemaphore,
+                                      DigestAlgorithmResolverService digestAlgorithmResolver) {
         this.semaphore = signatureSemaphore;
+        this.digestAlgorithmResolver = digestAlgorithmResolver;
     }
 
     /**
@@ -266,7 +270,11 @@ public class WsSecuritySignatureService {
 
             XMLSignatureFactory sigFactory = XMLSignatureFactory.getInstance("DOM");
 
-            DigestMethod digestMethod = sigFactory.newDigestMethod(DigestMethod.SHA256, null);
+            // Sertifika ve key tipine göre digest & signature method URI belirle
+            String digestMethodUri = resolveDigestMethodUri(material);
+            String signatureMethodUri = resolveSignatureMethodUri(material);
+
+            DigestMethod digestMethod = sigFactory.newDigestMethod(digestMethodUri, null);
 
             // Basit EXCLUSIVE C14N transform'u (parametresiz)
             Transform excTransform = sigFactory.newTransform(
@@ -297,10 +305,7 @@ public class WsSecuritySignatureService {
                             CanonicalizationMethod.EXCLUSIVE,
                             (C14NMethodParameterSpec) null
                     ),
-                    sigFactory.newSignatureMethod(
-                            "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",
-                            null
-                    ),
+                    sigFactory.newSignatureMethod(signatureMethodUri, null),
                     refs
             );
 
@@ -401,6 +406,53 @@ public class WsSecuritySignatureService {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         transformer.transform(new DOMSource(document), new StreamResult(outputStream));
         return outputStream.toByteArray();
+    }
+
+    /**
+     * Key tipi ve sertifika bilgisine göre XML Signature Method URI belirler.
+     * RSA -> rsa-shaXXX, EC/ECDSA -> ecdsa-shaXXX
+     */
+    private String resolveSignatureMethodUri(SigningMaterial material) {
+        String keyAlg = material.getPrivateKey().getAlgorithm();
+
+        if ("EC".equalsIgnoreCase(keyAlg) || "ECDSA".equalsIgnoreCase(keyAlg)) {
+            eu.europa.esig.dss.enumerations.DigestAlgorithm digest =
+                digestAlgorithmResolver.resolveDigestAlgorithm(material.getSigningCertificate());
+            switch (digest) {
+                case SHA384: return "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha384";
+                case SHA512: return "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha512";
+                case SHA1:   return "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha1";
+                default:     return "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256";
+            }
+        }
+
+        if ("DSA".equalsIgnoreCase(keyAlg)) {
+            return SignatureMethod.DSA_SHA1;
+        }
+
+        // RSA (default)
+        eu.europa.esig.dss.enumerations.DigestAlgorithm digest =
+            digestAlgorithmResolver.resolveDigestAlgorithm(material.getSigningCertificate());
+        switch (digest) {
+            case SHA384: return "http://www.w3.org/2001/04/xmldsig-more#rsa-sha384";
+            case SHA512: return "http://www.w3.org/2001/04/xmldsig-more#rsa-sha512";
+            case SHA1:   return SignatureMethod.RSA_SHA1;
+            default:     return "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
+        }
+    }
+
+    /**
+     * Sertifika bilgisine göre XML Digest Method URI belirler.
+     */
+    private String resolveDigestMethodUri(SigningMaterial material) {
+        eu.europa.esig.dss.enumerations.DigestAlgorithm digest =
+            digestAlgorithmResolver.resolveDigestAlgorithm(material.getSigningCertificate());
+        switch (digest) {
+            case SHA384: return "http://www.w3.org/2001/04/xmldsig-more#sha384";
+            case SHA512: return DigestMethod.SHA512;
+            case SHA1:   return DigestMethod.SHA1;
+            default:     return DigestMethod.SHA256;
+        }
     }
 }
 

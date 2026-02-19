@@ -1,6 +1,7 @@
 package io.mersel.dss.signer.api.services.keystore;
 
 import io.mersel.dss.signer.api.exceptions.KeyStoreException;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sun.security.pkcs11.SunPKCS11;
@@ -53,6 +54,8 @@ public class PKCS11KeyStoreProvider implements KeyStoreProvider {
     }
 
     private Provider buildPKCS11Provider() {
+        ensureBouncyCastleRegistered();
+
         StringJoiner configJoiner = new StringJoiner(System.lineSeparator());
         configJoiner.add("name = "+providerName);
         configJoiner.add("library = "+"\""+libraryPath+"\"");
@@ -69,6 +72,34 @@ public class PKCS11KeyStoreProvider implements KeyStoreProvider {
         
         LOGGER.debug("PKCS11 provider yapılandırıldı: {}", providerName);
         return provider;
+    }
+
+    /**
+     * JDK 8'in SunEC'si yalnızca named EC eğrilerini (OID formatı) destekler.
+     * HSM'ler (örn. mali mühür) CKA_EC_PARAMS'ı genellikle explicit formda döndürür
+     * ve bu "Only named ECParameters supported" IOException'a neden olur.
+     *
+     * SunPKCS11, P11ECPrivateKey oluştururken şu çağrıyı yapar:
+     *   AlgorithmParameters.getInstance("EC")  -- provider belirtilmez
+     * Bu çağrı JCA provider arama sırasını takip eder.
+     *
+     * BouncyCastle'ı pozisyon 1'e yerleştirerek, JCA'nın EC AlgorithmParameters
+     * çözümlemesini BC'nin hem named hem explicit parametreleri destekleyen
+     * implementasyonuna yönlendiriyoruz.
+     *
+     * Ek olarak SunEC'nin kaldırılması, JCA servis cache'inin eski (kısıtlı)
+     * SunEC implementasyonunu döndürmesini engeller.
+     */
+    private static synchronized void ensureBouncyCastleRegistered() {
+        if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) != null) {
+            return;
+        }
+
+        Security.removeProvider("SunEC");
+        Security.insertProviderAt(new BouncyCastleProvider(), 1);
+
+        LOGGER.info("BouncyCastle provider pozisyon 1'e kayıt edildi, SunEC kaldırıldı " +
+                    "(EC explicit parameters desteği için)");
     }
 }
 

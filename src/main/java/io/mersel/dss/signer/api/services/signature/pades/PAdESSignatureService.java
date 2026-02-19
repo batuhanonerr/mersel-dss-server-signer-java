@@ -129,12 +129,16 @@ public class PAdESSignatureService {
 
     /**
      * PDF içeriği için CMS imzası oluşturur.
-     * SigningCertificateV2 özniteliği ile SHA-256 hash kullanır.
+     * SigningCertificateV2 özniteliği ile sertifikaya uygun hash algoritması kullanır.
      */
     private byte[] createCMSSignature(PdfSignatureAppearance appearance,
                                      SigningMaterial material) throws Exception {
+        // Sertifika algoritmasına göre digest belirle
+        String digestAlgName = resolveDigestAlgorithmName(material);
+        org.bouncycastle.asn1.ASN1ObjectIdentifier digestOid = resolveDigestOid(digestAlgName);
+
         // SigningCertificateV2 için sertifika hash'i hesapla
-        MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+        MessageDigest messageDigest = MessageDigest.getInstance(digestAlgName);
         byte[] certificateHash = messageDigest.digest(
             material.getSigningCertificate().getEncoded());
 
@@ -148,7 +152,7 @@ public class PAdESSignatureService {
 
         // Create SigningCertificateV2 attribute
         ESSCertIDv2 essCert = new ESSCertIDv2(
-            new AlgorithmIdentifier(NISTObjectIdentifiers.id_sha256),
+            new AlgorithmIdentifier(digestOid),
             certificateHash, issuerSerial);
         SigningCertificateV2 signingCertificateV2 = new SigningCertificateV2(
             new ESSCertIDv2[]{essCert});
@@ -168,8 +172,9 @@ public class PAdESSignatureService {
                 .setSignedAttributeGenerator(
                     new DefaultSignedAttributeTableGenerator(attributeTable));
 
-        // Dinamik algoritma seçimi (RSA veya EC key'e göre)
-        String signatureAlgorithm = CryptoUtils.getSignatureAlgorithm(material.getPrivateKey());
+        // Dinamik algoritma seçimi (sertifika sigAlgName'den)
+        String signatureAlgorithm = CryptoUtils.getSignatureAlgorithm(
+            material.getPrivateKey(), material.getSigningCertificate());
         ContentSigner contentSigner = new JcaContentSignerBuilder(signatureAlgorithm)
             .build(material.getPrivateKey());
 
@@ -205,6 +210,26 @@ public class PAdESSignatureService {
 
         } finally {
             semaphore.release();
+        }
+    }
+
+    private String resolveDigestAlgorithmName(SigningMaterial material) {
+        String sigAlg = material.getSigningCertificate().getSigAlgName();
+        if (sigAlg != null) {
+            String upper = sigAlg.toUpperCase(java.util.Locale.ROOT);
+            if (upper.contains("SHA384")) return "SHA-384";
+            if (upper.contains("SHA512")) return "SHA-512";
+            if (upper.contains("SHA224")) return "SHA-224";
+        }
+        return "SHA-256";
+    }
+
+    private org.bouncycastle.asn1.ASN1ObjectIdentifier resolveDigestOid(String digestAlgName) {
+        switch (digestAlgName) {
+            case "SHA-384": return NISTObjectIdentifiers.id_sha384;
+            case "SHA-512": return NISTObjectIdentifiers.id_sha512;
+            case "SHA-224": return NISTObjectIdentifiers.id_sha224;
+            default:        return NISTObjectIdentifiers.id_sha256;
         }
     }
 }

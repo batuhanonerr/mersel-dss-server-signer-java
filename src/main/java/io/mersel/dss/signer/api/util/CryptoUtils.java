@@ -65,19 +65,20 @@ public final class CryptoUtils {
     /**
      * Private key tipine göre uygun signature algoritmasını döndürür.
      * RSA ve EC (Elliptic Curve) key'leri destekler.
+     * EC key boyutuna göre SHA256/SHA384/SHA512 otomatik seçilir.
      * 
      * @param privateKey İmzalama için kullanılacak private key
-     * @return Signature algoritması (örn: "SHA256withRSA", "SHA256withECDSA")
+     * @return Signature algoritması (örn: "SHA256withRSA", "SHA384withECDSA")
      */
     public static String getSignatureAlgorithm(PrivateKey privateKey) {
         if (privateKey instanceof RSAPrivateKey) {
             LOGGER.debug("RSA private key algılandı, SHA256withRSA kullanılacak");
             return "SHA256withRSA";
         } else if (privateKey instanceof ECPrivateKey) {
-            LOGGER.debug("EC private key algılandı, SHA256withECDSA kullanılacak");
-            return "SHA256withECDSA";
+            String ecAlgorithm = resolveECSignatureAlgorithm((ECPrivateKey) privateKey);
+            LOGGER.debug("EC private key algılandı, {} kullanılacak", ecAlgorithm);
+            return ecAlgorithm;
         } else {
-            // Fallback: Algorithm adından çıkarsama yap
             String algorithm = privateKey.getAlgorithm();
             LOGGER.warn("Bilinmeyen private key tipi: {}, algorithm: {}", 
                 privateKey.getClass().getName(), algorithm);
@@ -88,10 +89,48 @@ public final class CryptoUtils {
                 return "SHA256withRSA";
             }
             
-            // Son çare: Default RSA
             LOGGER.warn("Desteklenmeyen key tipi, SHA256withRSA kullanılacak");
             return "SHA256withRSA";
         }
+    }
+
+    /**
+     * Sertifika ve key tipine göre uygun signature algoritmasını döndürür.
+     * Sertifikanın kendi sigAlgName bilgisini kullanarak doğru hash boyutunu belirler.
+     */
+    public static String getSignatureAlgorithm(PrivateKey privateKey, 
+                                                java.security.cert.X509Certificate certificate) {
+        if (certificate != null) {
+            String certSigAlg = certificate.getSigAlgName();
+            if (certSigAlg != null && !certSigAlg.isEmpty()) {
+                LOGGER.debug("Sertifika imza algoritması: {}", certSigAlg);
+                return certSigAlg;
+            }
+        }
+        return getSignatureAlgorithm(privateKey);
+    }
+
+    /**
+     * EC key boyutuna göre uygun hash algoritmasını seçer.
+     * P-256 -> SHA256, P-384 -> SHA384, P-521 -> SHA512
+     */
+    private static String resolveECSignatureAlgorithm(ECPrivateKey ecKey) {
+        try {
+            java.security.spec.ECParameterSpec params = ecKey.getParams();
+            if (params != null) {
+                int fieldSize = params.getOrder().bitLength();
+                if (fieldSize <= 256) {
+                    return "SHA256withECDSA";
+                } else if (fieldSize <= 384) {
+                    return "SHA384withECDSA";
+                } else {
+                    return "SHA512withECDSA";
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.debug("EC parametre okunamadı, SHA256withECDSA kullanılacak", e);
+        }
+        return "SHA256withECDSA";
     }
 }
 
