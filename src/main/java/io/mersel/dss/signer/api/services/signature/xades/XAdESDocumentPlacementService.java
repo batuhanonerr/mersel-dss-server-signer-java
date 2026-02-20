@@ -72,20 +72,31 @@ public class XAdESDocumentPlacementService {
     }
 
     /**
-     * UBL ExtensionContent elemanını bulur.
-     * 
-     * @throws IllegalArgumentException ExtensionContent elemanı bulunamazsa
+     * UBL ExtensionContent elemanını bulur. Yoksa UBLExtensions/UBLExtension/ExtensionContent
+     * yapısını kök elemanın başına ekleyip ExtensionContent döner.
      */
     private Node findUblExtensionContent(Document document) {
         Node target = getFirstElementByTagNameNS(document, XmlConstants.NS_UBL_EXTENSION, "ExtensionContent");
-        
-        if (target == null) {
-            throw new IllegalArgumentException(
-                String.format("UBL belgesi için 'ExtensionContent' elemanı bulunamadı. " +
-                             "Beklenen namespace: %s", XmlConstants.NS_UBL_EXTENSION));
+        if (target != null) {
+            return target;
         }
-        
-        return target;
+
+        Element root = document.getDocumentElement();
+        Element ublExtensions = document.createElementNS(XmlConstants.NS_UBL_EXTENSION, "UBLExtensions");
+        Element ublExtension = document.createElementNS(XmlConstants.NS_UBL_EXTENSION, "UBLExtension");
+        Element extensionContent = document.createElementNS(XmlConstants.NS_UBL_EXTENSION, "ExtensionContent");
+
+        ublExtension.appendChild(extensionContent);
+        ublExtensions.appendChild(ublExtension);
+
+        Node firstChild = root.getFirstChild();
+        if (firstChild != null) {
+            root.insertBefore(ublExtensions, firstChild);
+        } else {
+            root.appendChild(ublExtensions);
+        }
+
+        return extensionContent;
     }
 
     /**
